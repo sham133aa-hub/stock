@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مراقبة المخزون</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+<script>window.addEventListener('load', function () {
+  if (typeof XLSX === 'undefined') {
+    var s = document.createElement('script');
+    s.src = 'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js';
+    s.onerror = function () { console.warn('تعذّر تحميل مكتبة قراءة Excel — رفع ملفات Excel لن يعمل بدون اتصال بالإنترنت، وباقي الصفحة تعمل بشكل طبيعي.'); };
+    try { document.head.appendChild(s); } catch (e) {}
+  }
+});</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root {
+    --navy:#1a365d; --blue:#2b6cb0; --teal:#0d9488; --teal-l:#14b8a6;
+    --red:#e53e3e; --orange:#dd6b20; --green:#38a169;
+    --bg:#f0f4f8; --card:#ffffff; --radius:12px;
+    --shadow:0 2px 10px rgba(26,54,93,.10);
+    --shadow-lg:0 6px 24px rgba(26,54,93,.16);
+  }
+  body { font-family:'Segoe UI', Tahoma, Arial, sans-serif; background:var(--bg); color:#1a202c; min-height:100vh; }
+
+  /* ===== Header ===== */
+  header {
+    position:sticky; top:0; z-index:100;
+    background:linear-gradient(135deg,#1a365d 0%,#2b6cb0 100%);
+    color:#fff; box-shadow:var(--shadow-lg);
+  }
+  .header-inner { max-width:1400px; margin:0 auto; padding:14px 20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  .logo {
+    width:46px; height:46px; border-radius:12px; background:rgba(255,255,255,.15);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .title-block h1 { font-size:1.35rem; font-weight:700; }
+  .title-block p { font-size:.78rem; opacity:.8; }
+  .header-spacer { flex:1; }
+  .record-counter {
+    background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.3);
+    padding:8px 16px; border-radius:999px; font-size:.9rem; font-weight:600; white-space:nowrap;
+  }
+  .record-counter b { color:#7ef0dd; }
+  .btn {
+    border:none; cursor:pointer; border-radius:10px; font-family:inherit;
+    padding:10px 16px; font-size:.88rem; font-weight:600;
+    display:inline-flex; align-items:center; gap:7px; transition:all .18s;
+  }
+  .btn-white { background:#fff; color:var(--navy); box-shadow:0 2px 6px rgba(0,0,0,.2); }
+  .btn-white:hover { background:#e6f7f4; transform:translateY(-1px); }
+  .btn-ghost { background:rgba(255,255,255,.14); color:#fff; border:1px solid rgba(255,255,255,.35); }
+  .btn-ghost:hover { background:rgba(255,255,255,.25); }
+  .btn-teal { background:var(--teal); color:#fff; }
+  .btn-teal:hover { background:#0f766e; }
+  .btn-gold { background:linear-gradient(135deg,#d69e2e,#b7791f); color:#fff; box-shadow:0 2px 8px rgba(214,158,46,.4); }
+  .btn-gold:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(214,158,46,.5); }
+
+  /* ===== Tabs ===== */
+  .tabs { display:flex; gap:8px; padding:0 20px; max-width:1400px; margin:0 auto; }
+  .tab-btn {
+    padding:12px 26px; border:none; cursor:pointer; font-family:inherit;
+    font-size:.95rem; font-weight:600; color:rgba(255,255,255,.75);
+    background:transparent; border-radius:12px 12px 0 0; transition:all .2s;
+  }
+  .tab-btn.active { background:var(--bg); color:var(--navy); }
+
+  main { max-width:1400px; margin:0 auto; padding:20px; }
+
+  /* ===== Drop zone ===== */
+  .dropzone {
+    border:2.5px dashed var(--blue); border-radius:var(--radius);
+    background:#e8f1fb; padding:26px; text-align:center; cursor:pointer;
+    margin-bottom:20px; transition:all .2s;
+  }
+  .dropzone:hover, .dropzone.dragover {
+    background:#dbeafe; border-color:var(--teal); transform:scale(1.005);
+  }
+  .dropzone .dz-icon { font-size:2rem; margin-bottom:6px; }
+  .dropzone h3 { color:var(--navy); font-size:1.05rem; margin-bottom:4px; }
+  .dropzone p { color:#4a5568; font-size:.82rem; }
+
+  /* ===== Cards & KPI ===== */
+  .card {
+    background:var(--card); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:18px 20px;
+  }
+  .kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin-bottom:20px; }
+  .kpi { display:flex; align-items:center; gap:14px; }
+  .kpi-icon { width:52px; height:52px; border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:1.4rem; color:#fff; }
+  .kpi h4 { font-size:.78rem; color:#718096; font-weight:600; margin-bottom:3px; }
+  .kpi .val { font-size:1.35rem; font-weight:800; color:var(--navy); }
+
+  .section-title { font-size:1.05rem; color:var(--navy); font-weight:700; margin:24px 0 12px; display:flex; align-items:center; gap:8px; }
+
+  /* ===== Filters ===== */
+  .filters { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:16px; }
+  .filters label { font-size:.75rem; color:#4a5568; font-weight:600; display:block; margin-bottom:5px; }
+  .filters input, .filters select {
+    width:100%; padding:9px 12px; border:1.5px solid #cbd5e0; border-radius:9px;
+    font-family:inherit; font-size:.87rem; background:#fff; outline:none; transition:border .15s;
+  }
+  .filters input:focus, .filters select:focus { border-color:var(--teal); }
+
+  /* ===== Table ===== */
+  .table-wrap { overflow-x:auto; border-radius:var(--radius); box-shadow:var(--shadow); background:#fff; }
+  table { width:100%; border-collapse:collapse; min-width:900px; font-size:.85rem; }
+  thead th {
+    background:linear-gradient(135deg,#1a365d,#2b6cb0); color:#fff;
+    padding:12px 10px; text-align:right; font-weight:600; white-space:nowrap; position:sticky; top:0;
+  }
+  tbody td { padding:10px; border-bottom:1px solid #edf2f7; }
+  tbody tr:hover { background:#f0fdfa; }
+  tr.low-row { background:#fff5f5; }
+  tr.low-row:hover { background:#feecec; }
+  .badge { padding:4px 12px; border-radius:999px; font-size:.74rem; font-weight:700; white-space:nowrap; }
+  .badge-red { background:#fed7d7; color:#9b2c2c; }
+  .badge-orange { background:#feebc8; color:#9c4221; }
+  .badge-green { background:#c6f6d5; color:#22543d; }
+  .bar-bg { width:70px; height:7px; background:#e2e8f0; border-radius:99px; overflow:hidden; display:inline-block; vertical-align:middle; margin-inline-start:6px; }
+  .bar-fill { height:100%; background:var(--teal); border-radius:99px; }
+  tfoot td { background:#f7fafc; font-weight:800; color:var(--navy); padding:12px 10px; border-top:2px solid var(--blue); }
+  .table-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; background:#fff; border-top:1px solid #edf2f7; flex-wrap:wrap; }
+  .table-footer span { font-size:.85rem; color:#4a5568; font-weight:600; }
+
+  /* ===== Alerts ===== */
+  .alert-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:14px; }
+  .alert-card { border-inline-start:4px solid var(--red); display:flex; gap:12px; align-items:center; animation:pulseGlow 2s infinite; }
+  @keyframes pulseGlow { 0%,100%{box-shadow:var(--shadow);} 50%{box-shadow:0 0 0 5px rgba(229,62,62,.15), var(--shadow);} }
+  .bell { font-size:1.5rem; animation:swing 1.6s ease-in-out infinite; transform-origin:top center; }
+  @keyframes swing { 0%,100%{transform:rotate(0);} 25%{transform:rotate(14deg);} 75%{transform:rotate(-14deg);} }
+  .alert-card h5 { font-size:.88rem; color:var(--navy); }
+  .alert-card p { font-size:.76rem; color:#718096; }
+
+  .empty { text-align:center; padding:40px; color:#718096; font-size:1rem; }
+
+  /* ===== Charts ===== */
+  .chart-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(380px,1fr)); gap:16px; }
+  .chart-card { height:380px; position:relative; }
+  .chart-card h3 { font-size:.95rem; color:var(--navy); margin-bottom:12px; font-weight:700; }
+  .chart-canvas-wrap { position:relative; height:calc(100% - 34px); }
+
+  /* ===== Group cards ===== */
+  .group-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:16px; }
+  .group-card { cursor:pointer; transition:transform .18s, box-shadow .18s; border-top:4px solid var(--teal); }
+  .group-card:hover { transform:translateY(-4px); box-shadow:var(--shadow-lg); }
+  .group-head { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+  .chip { width:44px; height:44px; border-radius:11px; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:800; font-size:1.05rem; flex-shrink:0; }
+  .group-head h3 { font-size:.95rem; color:var(--navy); }
+  .group-head .badge { margin-inline-start:auto; }
+  .g-stats { display:grid; grid-template-columns:1fr 1fr; gap:6px 12px; font-size:.8rem; color:#4a5568; margin-bottom:10px; }
+  .g-stats b { color:var(--navy); }
+  .pct-row { display:flex; align-items:center; gap:8px; font-size:.76rem; color:#4a5568; margin-bottom:12px; }
+  .pct-row .bar-bg { flex:1; margin:0; }
+  .mini-list { border-top:1px dashed #cbd5e0; padding-top:10px; max-height:300px; overflow-y:auto; }
+  .mini-list h6 { font-size:.74rem; color:#718096; margin-bottom:6px; }
+  .mini-item { display:flex; justify-content:space-between; font-size:.78rem; padding:3px 0; color:#2d3748; border-bottom:1px solid #f1f5f9; }
+  .mini-item:last-child { border-bottom:none; }
+  .mini-item b { color:var(--teal); white-space:nowrap; margin-inline-start:8px; }
+  .group-insight { margin-top:12px; padding-top:10px; border-top:1px dashed #cbd5e0; font-size:.78rem; line-height:1.6; font-weight:600; }
+  .group-insight.insight-good { color:#22543d; }
+  .group-insight.insight-ok { color:#2b6cb0; }
+  .group-insight.insight-warn { color:#9c4221; }
+  .group-insight.insight-bad { color:#9b2c2c; }
+  .group-insight.insight-neutral { color:#718096; font-weight:500; }
+
+  .stat-trio { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin-bottom:20px; }
+
+  /* ===== FAB & toast ===== */
+  .fab {
+    position:fixed; bottom:24px; left:24px; width:58px; height:58px; border-radius:50%;
+    background:var(--teal); color:#fff; font-size:1.5rem; border:none; cursor:pointer;
+    box-shadow:var(--shadow-lg); z-index:200; display:flex; align-items:center; justify-content:center;
+    transition:transform .2s;
+  }
+  .fab:hover { transform:scale(1.1) rotate(8deg); }
+  #toast {
+    position:fixed; bottom:100px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--navy); color:#fff; padding:13px 26px; border-radius:12px;
+    box-shadow:var(--shadow-lg); font-weight:600; opacity:0; pointer-events:none;
+    transition:all .3s; z-index:300; font-size:.9rem;
+  }
+  #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+  .hidden { display:none !important; }
+
+  @media (max-width:700px) {
+    .header-inner { padding:10px 12px; }
+    .title-block h1 { font-size:1.05rem; }
+    main { padding:12px; }
+    .chart-grid { grid-template-columns:1fr; }
+  }
+
+  /* ===== Tab 3: items by group ===== */
+  .tg-section { margin-bottom:20px; overflow:hidden; }
+  .tg-head { display:flex; align-items:center; gap:12px; padding:14px 18px; background:linear-gradient(135deg,#1a365d,#2b6cb0); color:#fff; flex-wrap:wrap; }
+  .tg-head .chip { background:#fff; color:#1a365d; }
+  .tg-head h3 { font-size:1rem; font-weight:800; margin:0; }
+  .tg-head .chip { display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:9px; font-weight:800; flex-shrink:0; }
+  .tg-meta { font-size:.8rem; opacity:.92; }
+  .tg-meta b { color:#7ef0dd; }
+  .tg-head .badge { margin-inline-start:auto; }
+  .tg-table th { background:#2b6cb0; }
+  .tg-table td { text-align:center; }
+  .tg-table .tg-name { text-align:right; font-size:.86rem; }
+  .tg-code { color:#718096; font-size:.75rem; white-space:nowrap; }
+  .tg-table tfoot td { background:#ebf8ff; font-weight:800; color:#2b6cb0; }
+  .empty-card { padding:30px; text-align:center; color:#718096; font-weight:600; }
+
+  @media print {
+    header, .fab, .filters, .dropzone, .tabs, .table-footer, .section-title, #toast, .btn { display:none !important; }
+    body { background:#fff; }
+    .card, .table-wrap { box-shadow:none; border:1px solid #ddd; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="logo">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#7ef0dd" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+    </div>
+    <div class="title-block">
+      <h1>مراقبة المخزون</h1>
+      <p>نظام متابعة الأصناف والكميات</p>
+    </div>
+    <div class="header-spacer"></div>
+    <div class="record-counter">عدد السجلات: <b id="recordCount">0</b> &nbsp;|&nbsp; 🕒 آخر تحديث: <b id="lastUpdate">—</b></div>
+    <button class="btn btn-white" id="uploadBtnHeader">📤 رفع ملف Excel</button>
+    <button class="btn btn-ghost" id="csvBtn">💾 تصدير CSV</button>
+    <button class="btn btn-gold" id="standaloneBtn" title="يحفظ البيانات مباشرة في نفس هذا الملف دون إنشاء نسخة جديدة (يتطلب Chrome أو Edge)">💾 حفظ</button>
+    <button class="btn btn-ghost" id="printBtn">🖨️ طباعة / PDF</button>
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="hidden">
+  </div>
+  <div class="tabs">
+    <button class="tab-btn active" id="tab1Btn">الرئيسية</button>
+    <button class="tab-btn" id="tab2Btn">حسب المجموعة</button>
+    <button class="tab-btn" id="tab3Btn">السلع حسب المجموعة</button>
+  </div>
+</header>
+
+<main>
+  <!-- Tab 1 -->
+  <div id="tab1">
+    <div class="dropzone" id="dropzone">
+      <div class="dz-icon">📁</div>
+      <h3>اسحب الملف هنا أو اضغط للاختيار</h3>
+      <p>ملفات Excel أو CSV — تتم قراءة جميع الصفوف تلقائياً</p>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="card kpi"><div class="kpi-icon" style="background:#2b6cb0">📦</div><div><h4>عدد الأصناف</h4><div class="val" id="kpiCount">0</div></div></div>
+      <div class="card kpi"><div class="kpi-icon" style="background:#0d9488">💰</div><div><h4>إجمالي قيمة المخزون (د.ع)</h4><div class="val" id="kpiValue">0</div></div></div>
+      <div class="card kpi"><div class="kpi-icon" style="background:#e53e3e">⚠️</div><div><h4>أصناف منخفضة</h4><div class="val" id="kpiLow">0</div></div></div>
+      <div class="card kpi"><div class="kpi-icon" style="background:#805ad5">🔄</div><div><h4>معدل الدوران العام</h4><div class="val" id="kpiTurn">0 مرة</div></div></div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="filters">
+        <div><label>بحث (كود / اسم)</label><input type="text" id="searchInput" placeholder="اكتب للبحث..."></div>
+        <div><label>المجموعة</label><select id="groupFilter"></select></div>
+        <div><label>الحالة</label>
+          <select id="statusFilter">
+            <option value="">الكل</option>
+            <option value="منخفض جداً">منخفض جداً</option>
+            <option value="منخفض">منخفض</option>
+            <option value="طبيعي">طبيعي</option>
+          </select>
+        </div>
+        <div><label>حد الندرة</label><input type="number" id="thresholdInput" value="50" min="0"></div>
+        <div><label>الترتيب</label>
+          <select id="sortSelect">
+            <option value="balDesc">الرصيد تنازلي</option>
+            <option value="balAsc">الرصيد تصاعدي</option>
+            <option value="valDesc">القيمة تنازلي</option>
+            <option value="turnDesc">الدوران تنازلي</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:flex-end"><button class="btn btn-teal" id="showAllBtn" style="width:100%">عرض الكل</button></div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>كود</th><th>اسم السلعة</th><th>مجموعة الصنف</th><th>الوحدة</th>
+          <th>كمية الرصيد</th><th>قيمة الرصيد</th><th>متوسط كلفة الوحدة</th><th>معدل الدوران</th><th>الحالة</th>
+        </tr></thead>
+        <tbody id="tableBody"></tbody>
+        <tfoot><tr>
+          <td colspan="4" id="footLabel">الإجمالي</td>
+          <td id="footBal">0</td><td id="footVal">0</td><td colspan="3"></td>
+        </tr></tfoot>
+      </table>
+      <div class="table-footer">
+        <span id="footInfo">عرض 0 من 0 صنف</span>
+        <button class="btn btn-teal" id="showAllBtn2">عرض الكل</button>
+      </div>
+    </div>
+
+    <h2 class="section-title">🔔 تنبيهات انخفاض المخزون</h2>
+    <div id="alertSection"></div>
+
+    <h2 class="section-title">📊 الرسوم البيانية</h2>
+    <div class="chart-grid">
+      <div class="card chart-card"><h3>قيمة المخزون حسب المجموعة</h3><div class="chart-canvas-wrap"><canvas id="chartGroup"></canvas></div></div>
+      <div class="card chart-card"><h3>أعلى 10 أصناف حسب الرصيد</h3><div class="chart-canvas-wrap"><canvas id="chartTop"></canvas></div></div>
+    </div>
+  </div>
+
+  <!-- Tab 2 -->
+  <div id="tab2" class="hidden">
+    <div class="stat-trio">
+      <div class="card kpi"><div class="kpi-icon" style="background:#2b6cb0">🗂️</div><div><h4>عدد المجموعات</h4><div class="val" id="gCount">0</div></div></div>
+      <div class="card kpi"><div class="kpi-icon" style="background:#0d9488">👑</div><div><h4>أكبر مجموعة (قيمة)</h4><div class="val" style="font-size:1rem" id="gTop">—</div></div></div>
+      <div class="card kpi"><div class="kpi-icon" style="background:#e53e3e">⚠️</div><div><h4>الأكثر أصنافاً منخفضة</h4><div class="val" style="font-size:1rem" id="gLowTop">—</div></div></div>
+    </div>
+    <div class="card" style="margin-bottom:16px; padding:12px 16px">
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <span style="font-weight:700;color:var(--navy);font-size:.88rem">ترتيب المجموعات:</span>
+        <select id="groupSort" style="padding:8px 12px;border:1.5px solid #cbd5e0;border-radius:9px;font-family:inherit">
+          <option value="val">حسب القيمة</option>
+          <option value="qty">حسب الكمية</option>
+          <option value="count">حسب العدد</option>
+          <option value="low">حسب المنخفضة</option>
+        </select>
+      </div>
+    </div>
+    <div class="group-grid" id="groupGrid"></div>
+  </div>
+
+  <!-- Tab 3: items by group -->
+  <div id="tab3" class="hidden">
+    <div class="stat-trio">
+      <div class="card kpi"><div class="kpi-icon" style="background:#2b6cb0">📋</div><div><h4>عدد المجموعات المعروضة</h4><div class="val" id="tgCount">0</div></div></div>
+      <div class="card kpi"><div class="kpi-icon" style="background:#0d9488">📦</div><div><h4>إجمالي السلع</h4><div class="val" id="tgItems">0</div></div></div>
+      <div class="card kpi"><div class="kpi-icon" style="background:#805ad5">💰</div><div><h4>إجمالي القيمة</h4><div class="val" id="tgValue" style="font-size:1rem">0</div></div></div>
+    </div>
+    <div class="card" style="margin-bottom:16px; padding:12px 16px">
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <span style="font-weight:700;color:var(--navy);font-size:.88rem">ترتيب السلع داخل كل مجموعة:</span>
+        <select id="tab3Sort" style="padding:8px 12px;border:1.5px solid #cbd5e0;border-radius:9px;font-family:inherit">
+          <option value="name">حسب الاسم (أبجدي)</option>
+          <option value="qtyDesc">حسب الكمية (تنازلي)</option>
+          <option value="valDesc">حسب القيمة (تنازلي)</option>
+        </select>
+      </div>
+    </div>
+    <div id="tab3Sections"></div>
+  </div>
+</main>
+
+<button class="fab" id="fabBtn" title="رفع ملف Excel">📤</button>
+<div id="toast"></div>
+
+<script>
+"use strict";
+
+/* ================= State ================= */
+let items = [];
+let chartGroup = null, chartTop = null;
+const CHIP_COLORS = ['#2b6cb0','#0d9488','#805ad5','#dd6b20','#3182ce','#38a169','#d53e8b','#319795','#b7791f','#4c51bf','#e53e3e','#00a3c4'];
+
+/* ================= Helpers ================= */
+function toNum(v) {
+  if (v === null || v === undefined) return 0;
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  const s = String(v).replace(/[,\s٬]/g, '').replace(/٫/g, '.').replace(/[^\d.\-]/g, '');
+  const n = parseFloat(s);
+  return isFinite(n) ? n : 0;
+}
+function fmt(n) { try { return Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 }); } catch (e) { return String(Math.round((Number(n) || 0) * 100) / 100); } }
+function fmtD(n) { try { return Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 }); } catch (e) { return String(Math.round(Number(n) || 0)); } }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+function thresholdOf(it) {
+  return (it.reorder && it.reorder > 0) ? it.reorder : getThreshold();
+}
+function getThreshold() { return toNum(document.getElementById('thresholdInput').value) || 50; }
+function statusOf(it) {
+  const th = thresholdOf(it);
+  if (it.balance === 0 || it.balance < th) return 'منخفض جداً';
+  if (it.balance < th * 1.5) return 'منخفض';
+  return 'طبيعي';
+}
+/* --- متوسط كلفة الوحدة وحساب الدوران وفق المعادلة المحاسبية الصحيحة ---
+   معدل دوران المخزون = الكمية المنصرفة خلال الفترة ÷ متوسط المخزون
+   متوسط المخزون = (رصيد أول الفترة + رصيد آخر الفترة) ÷ 2
+   رصيد أول الفترة = رصيد آخر الفترة - الوارد + الصادر (من معادلة حركة المخزون) */
+function avgCostOf(it) {
+  if (it.balance > 0 && it.value > 0) return it.value / it.balance;
+  if (it.price > 0) return it.price;
+  return 0;
+}
+function beginningBalanceOf(it) {
+  const b = (it.balance || 0) - (it.in || 0) + (it.out || 0);
+  return b > 0 ? b : 0;
+}
+function avgInventoryQtyOf(it) {
+  return (beginningBalanceOf(it) + (it.balance || 0)) / 2;
+}
+function turnOf(it) {
+  const avgQty = avgInventoryQtyOf(it);
+  if (!avgQty || avgQty <= 0) return null;
+  return (it.out || 0) / avgQty; // عدد المرات (turns) خلال الفترة
+}
+
+/* ================= Storage ================= */
+const BUNDLED_DATA_PLACEHOLDER = null; // replaced on export by current data
+const LAST_UPDATE_TS_PLACEHOLDER = null; // replaced on export by last save date
+
+function saveItems() {
+  try { localStorage.setItem('inv_items_v1', JSON.stringify(items)); } catch (e) {}
+}
+function saveTimestamp() {
+  try { localStorage.setItem('inv_last_update', String(Date.now())); } catch (e) {}
+  renderSaveDate();
+}
+function renderSaveDate() {
+  let ts = null;
+  try { ts = localStorage.getItem('inv_last_update'); } catch (e) {}
+  if (!ts && typeof LAST_UPDATE_TS === 'number') ts = LAST_UPDATE_TS;
+  const el = document.getElementById('lastUpdate');
+  if (!el) return;
+  if (!ts) { el.textContent = '—'; return; }
+  const d = new Date(Number(ts));
+  try {
+    el.textContent = d.toLocaleDateString('ar-IQ', { year: 'numeric', month: 'long', day: 'numeric' }) +
+      ' — ' + d.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' });
+  } catch (e) {
+    // بعض متصفحات الجوال القديمة لا تدعم بيانات لغة ar-IQ الكاملة — نستخدم تنسيقاً بسيطاً بديلاً
+    try {
+      const p2 = n => String(n).padStart(2, '0');
+      el.textContent = p2(d.getDate()) + '/' + p2(d.getMonth() + 1) + '/' + d.getFullYear() + ' — ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+    } catch (e2) { el.textContent = d.toString(); }
+  }
+}
+function loadItems() {
+  try {
+    const raw = localStorage.getItem('inv_items_v1');
+    if (raw) { const a = JSON.parse(raw); if (Array.isArray(a) && a.length) return a; }
+  } catch (e) {}
+  return null;
+}
+
+/* ================= Save in place (overwrites the SAME file, no copy) ================= */
+let savedFileHandle = null; // FileSystemFileHandle - kept in memory for this browser tab/session
+
+function buildSavedHtml() {
+  const html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+  const payload = JSON.stringify(items);
+  const ts = (function(){ try { return localStorage.getItem('inv_last_update'); } catch(e){ return null; } })() || String(Date.now());
+  let out = html.replace('const BUNDLED_DATA_PLACEHOLDER = null;', 'const BUNDLED_DATA_PLACEHOLDER = ' + payload + ';');
+  out = out.replace('const LAST_UPDATE_TS_PLACEHOLDER = null;', 'const LAST_UPDATE_TS_PLACEHOLDER = ' + ts + ';');
+  if (out === html) return null;
+  return out;
+}
+
+function downloadAsFile(html) {
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'مراقبة-المخزون-نهائي.html';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+const supportsInPlaceSave = (function () {
+  try { return 'showSaveFilePicker' in window && window.self === window.top; }
+  catch (e) { return false; }
+})();
+
+async function saveInPlace() {
+  if (!items.length) { alert('لا توجد بيانات للحفظ.'); return; }
+  const out = buildSavedHtml();
+  if (!out) { alert('تعذّر الحفظ (لم يتم العثور على نقطة الإدراج). أبلغ المطور.'); return; }
+
+  if (!supportsInPlaceSave) {
+    // متصفح لا يدعم الحفظ المباشر (مثل Firefox / Safari) — يتم تنزيل نفس اسم الملف كبديل
+    downloadAsFile(out);
+    showToast('تم تنزيل نسخة محدّثة (متصفحك لا يدعم الحفظ المباشر بنفس الملف)');
+    return;
+  }
+
+  try {
+    if (!savedFileHandle) {
+      // أول مرة فقط: اختر نفس الملف المفتوح حالياً ليتم الحفظ فيه مباشرة من الآن فصاعداً
+      savedFileHandle = await window.showSaveFilePicker({
+        suggestedName: 'مراقبة-المخزون-نهائي.html',
+        types: [{ description: 'HTML File', accept: { 'text/html': ['.html'] } }]
+      });
+    }
+    const writable = await savedFileHandle.createWritable();
+    await writable.write(out);
+    await writable.close();
+    showToast('تم الحفظ ✅ مباشرة في نفس الملف — ' + items.length + ' صنف');
+  } catch (err) {
+    if (err && err.name === 'AbortError') return; // المستخدم أغلق نافذة الاختيار
+    savedFileHandle = null;
+    console.error(err);
+    alert('تعذّر الحفظ المباشر في الملف، سيتم تنزيل نسخة بدلاً من ذلك.\n' + (err && err.message ? err.message : err));
+    downloadAsFile(out);
+  }
+}
+function getBundledData() {
+  return (typeof BUNDLED_DATA_PLACEHOLDER === 'object' && Array.isArray(BUNDLED_DATA_PLACEHOLDER)) ? BUNDLED_DATA_PLACEHOLDER : null;
+}
+function getBundledTimestamp() {
+  return (typeof LAST_UPDATE_TS_PLACEHOLDER === 'number' && LAST_UPDATE_TS_PLACEHOLDER > 0) ? LAST_UPDATE_TS_PLACEHOLDER : null;
+}
+
+/* ================= Demo data ================= */
+function demoData() {
+  return [
+    {"code":"1110","name":"باكيت تايت BUBBLE موف 1.5 كغ 6*1","group":"تايت ببل باكيت","unit":"كارتون","balance":74.3,"value":897248,"in":0,"out":0,"price":12070.5},
+    {"code":"1111","name":"باكيت تايت BUBBLEأبيض 1.5 كغ 6*1","group":"تايت ببل باكيت","unit":"كارتون","balance":53.7,"value":655264,"in":0,"out":0,"price":12209.9},
+    {"code":"1112","name":"باكيت تايت BUBBLEأخضر 1.5 كغ 6*1","group":"تايت ببل باكيت","unit":"كارتون","balance":54.7,"value":638069,"in":0,"out":0,"price":11672},
+    {"code":"1116","name":"تايت BUBBLE موف 3كغ 4*1","group":"تايت ببل 3كغ","unit":"كارتون","balance":439.4,"value":5567618,"in":0,"out":0,"price":12671.44},
+    {"code":"1119","name":"تايت عادي Bubble احمر 9كغ*1","group":"تايت ببل 9 كغ عادي","unit":"كيس","balance":461,"value":301000,"in":0,"out":0,"price":653}
+  ];
+}
+
+/* ================= Excel parsing — ALL ROWS, bulletproof ================= */
+function parseWorkbook(wb) {
+  // Pick the sheet with the most rows (some reports have several sheets)
+  let bestName = null, bestRows = [];
+  for (const sn of wb.SheetNames) {
+    const sh = wb.Sheets[sn];
+    if (!sh) continue;
+    const rs = XLSX.utils.sheet_to_json(sh, { header: 1, raw: true, defval: null });
+    if (rs.length > bestRows.length) { bestRows = rs; bestName = sn; }
+  }
+  if (!bestName || bestRows.length < 2) throw new Error('لا توجد أوراق أو صفوف في الملف (عدد الصفوف: ' + bestRows.length + ')');
+  const rows = bestRows;
+
+  // Locate the header row: the row containing 'اسم السلعة' or 'مجموعة الصنف' or 'كمية الرصيد'
+  let headerIdx = -1, colMap = null;
+  const KEYS = ['السلعة', 'اسم السلعة', 'مجموعة الصنف', 'كمية الرصيد', 'وحدة'];
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const r = rows[i] || [];
+    const joined = r.map(c => String(c == null ? '' : c)).join('|');
+    const hits = KEYS.filter(k => joined.includes(k)).length;
+    if (hits >= 2) {
+      headerIdx = i;
+      colMap = {};
+      r.forEach((c, idx) => { if (c != null) colMap[String(c).trim()] = idx; });
+      break;
+    }
+  }
+  // Column getter: by header name if found, else by fixed index
+  const gi = (r, name, fallbackIdx) => {
+    if (colMap && colMap[name] != null && colMap[name] !== undefined) return r[colMap[name]];
+    return r[fallbackIdx];
+  };
+  const start = headerIdx >= 0 ? headerIdx + 1 : 1;
+  const parsed = [];
+  // Loop from the first data row to the END — no cap, no slicing.
+  for (let i = start; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r) continue;
+    const code = gi(r, 'السلعة', 0) == null ? '' : String(gi(r, 'السلعة', 0)).trim();
+    const name = gi(r, 'اسم السلعة', 1) == null ? '' : String(gi(r, 'اسم السلعة', 1)).trim();
+    const group = gi(r, 'مجموعة الصنف', 2) == null ? '' : String(gi(r, 'مجموعة الصنف', 2)).trim();
+    if ((code === '' && name === '') || group === 'All Item Groups') continue;
+    parsed.push({
+      code: code,
+      name: name,
+      group: group || 'غير مصنف',
+      warehouse: gi(r, 'المستودعات', 3) == null ? '' : String(gi(r, 'المستودعات', 3)).trim(),
+      unit: gi(r, 'وحدة قياس السهم', 4) == null ? '' : String(gi(r, 'وحدة قياس السهم', 4)).trim(),
+      balance: toNum(gi(r, 'كمية الرصيد', 5)),
+      value: toNum(gi(r, 'قيمة الرصيد', 6)),
+      in: toNum(gi(r, 'كمية قادمة', 9)),
+      out: toNum(gi(r, 'كمية خارجة', 11)),
+      price: toNum(gi(r, 'سعر التقييم', 13)),
+      reorder: toNum(gi(r, 'مستوى اعادة الطلب', 14))
+    });
+  }
+  // Diagnostic info attached for the error dialog
+  parsed._diag = { sheet: bestName, totalRows: rows.length, headerIdx: headerIdx, skipped: rows.length - start - parsed.length };
+  return parsed;
+}
+
+/* ================= Merge same-name rows (same item name → one row) ================= */
+function mergeSameName(arr) {
+  const map = {};
+  const out = [];
+  arr.forEach(it => {
+    const key = (it.name + '||' + it.group + '||' + it.unit).toLowerCase();
+    if (!map[key]) {
+      map[key] = {
+        code: it.code, name: it.name, group: it.group, warehouse: it.warehouse, unit: it.unit,
+        balance: it.balance, value: it.value, in: (it.in || 0), out: (it.out || 0), price: it.price, reorder: it.reorder
+      };
+      out.push(map[key]);
+      return;
+    }
+    const m = map[key];
+    m.balance += it.balance; m.value += it.value; m.in += (it.in || 0); m.out += (it.out || 0);
+    if (it.price > 0 && m.price === 0) m.price = it.price;
+    if (it.reorder > 0 && m.reorder === 0) m.reorder = it.reorder;
+    if (it.code && (' ' + m.code + ' ').indexOf(' ' + it.code + ' ') === -1) m.code = m.code + ' / ' + it.code;
+  });
+  return out;
+}
+
+function handleFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      const parsed = parseWorkbook(wb);
+      const merged = mergeSameName(parsed);
+      if (!merged.length) {
+        const d = parsed._diag || {};
+        alert('لم يتم العثور على صفوف بيانات صالحة.\n\nتشخيص:\n• الورقة المستخدمة: ' + (d.sheet || '-') +
+          '\n• إجمالي الصفوف: ' + (d.totalRows || 0) +
+          '\n• صف العناوين: ' + (d.headerIdx >= 0 ? 'صف رقم ' + (d.headerIdx + 1) : 'غير موجود') +
+          '\n• صفوف متجاهلة: ' + (d.skipped || 0) +
+          '\n\nتأكد أن الملف يحتوي أعمدة: السلعة، اسم السلعة، مجموعة الصنف، كمية الرصيد.');
+        return;
+      }
+      items = merged;                 // ALL rows, merged by name
+      saveItems();                    // save ALL items
+      saveTimestamp();                // record save date, shown in header
+      refreshAll();
+      const skippedDup = parsed.length - merged.length;
+      showToast('تم رفع ' + merged.length + ' صنف بنجاح' + (skippedDup > 0 ? ' (تم دمج ' + skippedDup + ' سطر مكرر الاسم)' : ''));
+    } catch (err) {
+      alert('خطأ في قراءة الملف: ' + (err && err.message ? err.message : err));
+    }
+  };
+  reader.onerror = function() { alert('فشل في قراءة الملف.'); };
+  reader.readAsArrayBuffer(file);
+}
+
+/* ================= File input wiring (bulletproof) ================= */
+const fileInput = document.getElementById('fileInput');
+const dropzone = document.getElementById('dropzone');
+
+fileInput.addEventListener('change', function() {
+  if (fileInput.files && fileInput.files[0]) {
+    handleFile(fileInput.files[0]);
+    fileInput.value = ''; // allow re-uploading same file
+  }
+});
+// Header button + FAB both trigger the hidden input
+document.getElementById('uploadBtnHeader').addEventListener('click', function() { fileInput.click(); });
+document.getElementById('fabBtn').addEventListener('click', function() { fileInput.click(); });
+// Dropzone: click opens picker (input is inside header, so trigger programmatically)
+dropzone.addEventListener('click', function() { fileInput.click(); });
+// Drag & drop
+['dragenter', 'dragover'].forEach(ev => dropzone.addEventListener(ev, function(e) {
+  e.preventDefault(); e.stopPropagation(); dropzone.classList.add('dragover');
+}));
+['dragleave', 'drop'].forEach(ev => dropzone.addEventListener(ev, function(e) {
+  e.preventDefault(); e.stopPropagation(); dropzone.classList.remove('dragover');
+}));
+dropzone.addEventListener('drop', function(e) {
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) handleFile(f);
+});
+// Prevent default page-level drop navigation
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => e.preventDefault());
+
+/* ================= Filters & render ================= */
+function getFiltered() {
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  const g = document.getElementById('groupFilter').value;
+  const st = document.getElementById('statusFilter').value;
+  const sort = document.getElementById('sortSelect').value;
+  const th = getThreshold();
+
+  let list = items.filter(it => {
+    if (q && !(String(it.code).toLowerCase().includes(q) || it.name.toLowerCase().includes(q))) return false;
+    if (g && it.group !== g) return false;
+    if (st) {
+      const t = (it.reorder > 0) ? it.reorder : th;
+      const s = (it.balance === 0 || it.balance < t) ? 'منخفض جداً' : (it.balance < t * 1.5 ? 'منخفض' : 'طبيعي');
+      if (s !== st) return false;
+    }
+    return true;
+  });
+
+  if (sort === 'balDesc') list.sort((a, b) => b.balance - a.balance);
+  else if (sort === 'balAsc') list.sort((a, b) => a.balance - b.balance);
+  else if (sort === 'valDesc') list.sort((a, b) => b.value - a.value);
+  else if (sort === 'turnDesc') list.sort((a, b) => (turnOf(b) || 0) - (turnOf(a) || 0));
+  return list;
+}
+
+function renderTable() {
+  const list = getFiltered();
+  const tbody = document.getElementById('tableBody');
+  const th = getThreshold();
+  let tBal = 0, tVal = 0;
+
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty">لا توجد بيانات مطابقة</td></tr>';
+  } else {
+    tbody.innerHTML = list.map(it => {
+      tBal += it.balance; tVal += it.value;
+      const st = statusOf(it);
+      const cls = st === 'منخفض جداً' ? 'badge-red' : st === 'منخفض' ? 'badge-orange' : 'badge-green';
+      const low = st !== 'طبيعي' ? ' low-row' : '';
+      const turn = turnOf(it);
+      const turnPct = turn === null ? 0 : Math.min(100, turn * 33.33); // شريط تقريبي: 3 مرات = شريط ممتلئ
+      const turnCell = turn === null
+        ? '—'
+        : fmt(turn) + ' مرة <span class="bar-bg"><span class="bar-fill" style="display:block;width:' + turnPct.toFixed(0) + '%"></span></span>';
+      const avgCost = avgCostOf(it);
+      const avgCostCell = avgCost > 0 ? fmt(avgCost) : '—';
+      return '<tr class="' + low.trim() + '"><td>' + esc(it.code) + '</td><td>' + esc(it.name) + '</td><td>' + esc(it.group) + '</td><td>' + esc(it.unit) + '</td><td>' + fmt(it.balance) + '</td><td>' + fmtD(it.value) + '</td><td>' + avgCostCell + '</td><td>' + turnCell + '</td><td><span class="badge ' + cls + '">' + st + '</span></td></tr>';
+    }).join('');
+  }
+
+  document.getElementById('footLabel').colSpan = 4;
+  document.getElementById('footBal').textContent = fmt(tBal);
+  document.getElementById('footVal').textContent = fmtD(tVal);
+  document.getElementById('footInfo').textContent = 'عرض ' + list.length + ' من ' + items.length + ' صنف';
+  document.getElementById('recordCount').textContent = items.length;
+}
+
+function renderKPIs() {
+  const th = getThreshold();
+  let totalVal = 0, low = 0;
+  let totalCOGS = 0, totalAvgInvVal = 0;
+  items.forEach(it => {
+    totalVal += it.value;
+    const t = (it.reorder > 0) ? it.reorder : th;
+    if (it.balance === 0 || it.balance < t) low++;
+    // تجميع الدوران بالقيمة (بالدينار) حتى يكون الإجمالي صحيحاً عبر وحدات قياس مختلفة
+    const cost = avgCostOf(it);
+    const avgQty = avgInventoryQtyOf(it);
+    totalCOGS += (it.out || 0) * cost;
+    totalAvgInvVal += avgQty * cost;
+  });
+  document.getElementById('kpiCount').textContent = items.length;
+  document.getElementById('kpiValue').textContent = fmtD(totalVal);
+  document.getElementById('kpiLow').textContent = low;
+  const turn = totalAvgInvVal > 0 ? (totalCOGS / totalAvgInvVal) : 0;
+  document.getElementById('kpiTurn').textContent = turn.toFixed(2) + ' مرة';
+}
+
+function renderGroupFilter() {
+  const sel = document.getElementById('groupFilter');
+  const cur = sel.value;
+  const counts = {};
+  items.forEach(it => { counts[it.group] = (counts[it.group] || 0) + 1; });
+  const groups = Object.keys(counts).sort();
+  sel.innerHTML = '<option value="">كل المجموعات (' + items.length + ')</option>' +
+    groups.map(g => '<option value="' + esc(g) + '">' + esc(g) + ' (' + counts[g] + ')</option>').join('');
+  if (groups.includes(cur)) sel.value = cur;
+}
+
+function renderAlerts() {
+  const th = getThreshold();
+  const lowItems = items.filter(it => {
+    const t = (it.reorder > 0) ? it.reorder : th;
+    return it.balance === 0 || it.balance < t;
+  }).sort((a, b) => a.balance - b.balance).slice(0, 12);
+  const sec = document.getElementById('alertSection');
+  if (!lowItems.length) {
+    sec.innerHTML = '<div class="card empty">لا توجد أصناف منخفضة 🎉</div>';
+    return;
+  }
+  sec.innerHTML = '<div class="alert-grid">' + lowItems.map(it =>
+    '<div class="card alert-card"><div class="bell">🔔</div><div><h5>' + esc(it.name) + '</h5><p>الرصيد: <b>' + fmt(it.balance) + '</b> — الحد: ' + fmt((it.reorder > 0) ? it.reorder : th) + '</p></div></div>'
+  ).join('') + '</div>';
+}
+
+function renderCharts() {
+  if (typeof Chart === 'undefined') {
+    // مكتبة الرسوم البيانية لم تُحمّل (لا يوجد اتصال بالإنترنت) — نتجاوز الرسوم دون كسر باقي الصفحة
+    ['chartGroup', 'chartTop'].forEach(id => {
+      const cv = document.getElementById(id);
+      if (cv && cv.parentElement) cv.parentElement.innerHTML = '<div class="empty" style="padding:20px">تعذّر تحميل مكتبة الرسوم البيانية (يتطلب اتصالاً بالإنترنت أول مرة)</div>';
+    });
+    return;
+  }
+  try {
+  const gMap = {};
+  items.forEach(it => { gMap[it.group] = (gMap[it.group] || 0) + it.value; });
+  const gTop = Object.entries(gMap).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const iTop = items.slice().sort((a, b) => b.balance - a.balance).slice(0, 10);
+
+  const gc = document.getElementById('chartGroup').getContext('2d');
+  if (chartGroup) chartGroup.destroy();
+  chartGroup = new Chart(gc, {
+    type: 'bar',
+    data: {
+      labels: gTop.map(x => x[0]),
+      datasets: [{ label: 'القيمة (د.ع)', data: gTop.map(x => x[1]), backgroundColor: '#2b6cb0', borderRadius: 6 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { font: { size: 10 } } } } }
+  });
+
+  const tc = document.getElementById('chartTop').getContext('2d');
+  if (chartTop) chartTop.destroy();
+  chartTop = new Chart(tc, {
+    type: 'bar',
+    data: {
+      labels: iTop.map(x => x.name.length > 24 ? x.name.slice(0, 24) + '…' : x.name),
+      datasets: [{ label: 'الرصيد', data: iTop.map(x => x.balance), backgroundColor: '#0d9488', borderRadius: 6 }]
+    },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+  });
+  } catch (e) { console.error('renderCharts error:', e); }
+}
+
+/* ================= رأي تلقائي حول دوران كل مجموعة ================= */
+function turnInsightOf(g) {
+  const turn = g.avgInvVal > 0 ? (g.cogs / g.avgInvVal) : null;
+  if (turn === null) return { cls: 'insight-neutral', text: 'لا توجد بيانات كافية (وارد/صادر) لتقييم دوران هذه المجموعة' };
+
+  let out;
+  if (turn >= 2) out = { cls: 'insight-good', text: '🟢 دوران سريع (' + turn.toFixed(2) + ' مرة) — تصريف جيد لمخزون هذه المجموعة' };
+  else if (turn >= 1) out = { cls: 'insight-ok', text: '🟡 دوران معتدل (' + turn.toFixed(2) + ' مرة) — ضمن المعدل المقبول' };
+  else if (turn >= 0.3) out = { cls: 'insight-warn', text: '🟠 دوران بطيء (' + turn.toFixed(2) + ' مرة) — يُنصح بمراجعة المشتريات أو خطة البيع لهذه المجموعة' };
+  else out = { cls: 'insight-bad', text: '🔴 دوران ضعيف جداً (' + turn.toFixed(2) + ' مرة) — مخزون شبه راكد، يستدعي مراجعة عاجلة' };
+
+  // تنبيه إضافي عند تعارض الدوران مع وجود نقص في المخزون
+  if (turn >= 1.5 && g.low > 0) {
+    out.text += '. تنبيه: مع وجود أصناف منخفضة ضمن مجموعة سريعة الحركة، هناك احتمال نفاد قريب لبعض السلع';
+  } else if (turn < 0.3 && g.low === 0) {
+    out.text += '. قد يستدعي ذلك تقليل كميات الشراء مستقبلاً لتفادي تجميد رأس المال في هذه المجموعة';
+  }
+  return out;
+}
+
+/* ================= Tab 2: groups ================= */
+function renderGroups() {
+  const map = {};
+  const th = getThreshold();
+  let grandVal = 0, grandQty = 0;
+  items.forEach(it => {
+    grandVal += it.value; grandQty += it.balance;
+    if (!map[it.group]) map[it.group] = { name: it.group, count: 0, qty: 0, val: 0, low: 0, cogs: 0, avgInvVal: 0, top: [] };
+    const g = map[it.group];
+    g.count++; g.qty += it.balance; g.val += it.value;
+    const t = (it.reorder > 0) ? it.reorder : th;
+    if (it.balance === 0 || it.balance < t) g.low++;
+    // دوران مرجّح بالقيمة (وليس متوسط بسيط للنسب) ليعكس وزن كل صنف الحقيقي
+    const cost = avgCostOf(it);
+    g.cogs += (it.out || 0) * cost;
+    g.avgInvVal += avgInventoryQtyOf(it) * cost;
+    g.top.push(it);
+  });
+  const groups = Object.values(map);
+  groups.forEach(g => g.top.sort((a, b) => b.balance - a.balance));
+
+  document.getElementById('gCount').textContent = groups.length;
+  const topVal = groups.slice().sort((a, b) => b.val - a.val)[0];
+  document.getElementById('gTop').textContent = topVal ? topVal.name : '—';
+  const topLow = groups.slice().sort((a, b) => b.low - a.low)[0];
+  document.getElementById('gLowTop').textContent = (topLow && topLow.low > 0) ? topLow.name : '—';
+
+  const sortMode = document.getElementById('groupSort').value;
+  groups.sort((a, b) => {
+    if (sortMode === 'qty') return b.qty - a.qty;
+    if (sortMode === 'count') return b.count - a.count;
+    if (sortMode === 'low') return b.low - a.low;
+    return b.val - a.val;
+  });
+
+  document.getElementById('groupGrid').innerHTML = groups.map((g, i) => {
+    const pct = grandVal > 0 ? (g.val / grandVal) * 100 : 0;
+    const color = CHIP_COLORS[i % CHIP_COLORS.length];
+    const avgTurn = g.avgInvVal > 0 ? (g.cogs / g.avgInvVal).toFixed(2) + ' مرة' : '—';
+    const avgCostG = g.qty > 0 ? fmt(g.val / g.qty) : '—';
+    const badge = g.low > 0 ? '<span class="badge badge-red">' + g.low + ' منخفض</span>' : '<span class="badge badge-green">سليم</span>';
+    const mini = g.top.map(it =>
+      '<div class="mini-item"><span>' + esc(it.name) + '</span><b>' + fmt(it.balance) + ' ' + esc(it.unit) + '</b></div>'
+    ).join('');
+    const insight = turnInsightOf(g);
+    return '<div class="card group-card" data-group="' + esc(g.name) + '">' +
+      '<div class="group-head"><div class="chip" style="background:' + color + '">' + esc(g.name.charAt(0)) + '</div><h3>' + esc(g.name) + '</h3>' + badge + '</div>' +
+      '<div class="g-stats"><span>عدد السلع: <b>' + g.count + '</b></span><span>إجمالي الكمية: <b>' + fmt(g.qty) + '</b></span>' +
+      '<span>إجمالي القيمة: <b>' + fmtD(g.val) + '</b></span><span>متوسط الدوران: <b>' + avgTurn + '</b></span>' +
+      '<span>متوسط كلفة الوحدة: <b>' + avgCostG + '</b></span></div>' +
+      '<div class="pct-row"><span>نسبة من الإجمالي</span><span class="bar-bg"><span class="bar-fill" style="display:block;width:' + pct.toFixed(1) + '%"></span></span><b>' + pct.toFixed(1) + '%</b></div>' +
+      '<div class="mini-list"><h6>كل أصناف المجموعة (' + g.count + ') حسب الكمية</h6>' + mini + '</div>' +
+      '<div class="group-insight ' + insight.cls + '">' + insight.text + '</div></div>';
+  }).join('');
+}
+
+document.getElementById('groupGrid').addEventListener('click', function(e) {
+  const card = e.target.closest('.group-card');
+  if (!card) return;
+  const g = card.getAttribute('data-group');
+  document.getElementById('groupFilter').value = g;
+  switchTab(1);
+  renderTable();
+});
+
+/* ================= Tabs ================= */
+function switchTab(n) {
+  document.getElementById('tab1').classList.toggle('hidden', n !== 1);
+  document.getElementById('tab2').classList.toggle('hidden', n !== 2);
+  document.getElementById('tab3').classList.toggle('hidden', n !== 3);
+  document.getElementById('tab1Btn').classList.toggle('active', n === 1);
+  document.getElementById('tab2Btn').classList.toggle('active', n === 2);
+  document.getElementById('tab3Btn').classList.toggle('active', n === 3);
+  if (n === 2) renderGroups();
+  if (n === 3) renderItemsByGroup();
+}
+document.getElementById('tab1Btn').addEventListener('click', () => switchTab(1));
+document.getElementById('tab2Btn').addEventListener('click', () => switchTab(2));
+document.getElementById('tab3Btn').addEventListener('click', () => switchTab(3));
+document.getElementById('tab3Sort').addEventListener('change', renderItemsByGroup);
+
+/* ================= Tab 3: items by group (name + code) ================= */
+function renderItemsByGroup() {
+  const sortMode = document.getElementById('tab3Sort').value;
+  const th = getThreshold();
+  const map = {};
+  items.forEach(it => {
+    if (!map[it.group]) map[it.group] = [];
+    map[it.group].push(it);
+  });
+  const names = Object.keys(map).sort((a, b) => a.localeCompare(b, 'ar'));
+  let tItems = 0, tVal = 0;
+
+  const sections = names.map(gname => {
+    const list = map[gname].slice();
+    if (sortMode === 'qtyDesc') list.sort((a, b) => b.balance - a.balance);
+    else if (sortMode === 'valDesc') list.sort((a, b) => b.value - a.value);
+    else list.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+
+    let gQty = 0, gVal = 0, gLow = 0;
+    list.forEach(it => {
+      gQty += it.balance; gVal += it.value; tItems++; tVal += it.value;
+      const t = (it.reorder > 0) ? it.reorder : th;
+      if (it.balance === 0 || it.balance < t) gLow++;
+    });
+    const color = CHIP_COLORS[names.indexOf(gname) % CHIP_COLORS.length];
+    const lowBadge = gLow > 0 ? '<span class="badge badge-red">⚠ ' + gLow + ' منخفض</span>' : '<span class="badge badge-green">سليم</span>';
+
+    const rows = list.map(it => {
+      const st = statusOf(it);
+      const cls = st === 'منخفض جداً' ? 'badge-red' : st === 'منخفض' ? 'badge-orange' : 'badge-green';
+      const low = st !== 'طبيعي' ? ' low-row' : '';
+      return '<tr class="' + low.trim() + '">' +
+        '<td class="tg-name"><b>' + esc(it.name) + '</b></td>' +
+        '<td>' + fmt(it.balance) + '</td><td>' + esc(it.unit) + '</td><td>' + fmtD(it.value) + '</td>' +
+        '<td><span class="badge ' + cls + '">' + st + '</span></td></tr>';
+    }).join('');
+
+    return '<div class="tg-section card">' +
+      '<div class="tg-head"><div class="chip" style="background:' + color + '">' + esc(gname.charAt(0)) + '</div>' +
+      '<h3>' + esc(gname) + '</h3><span class="tg-meta">عدد السلع: <b>' + list.length + '</b></span>' +
+      '<span class="tg-meta">إجمالي الكمية: <b>' + fmt(gQty) + '</b></span>' +
+      '<span class="tg-meta">إجمالي القيمة: <b>' + fmtD(gVal) + '</b></span>' + lowBadge + '</div>' +
+      '<div class="table-wrap" style="box-shadow:none"><table class="tg-table"><thead><tr>' +
+      '<th>اسم السلعة</th><th>كمية الرصيد</th><th>الوحدة</th><th>قيمة الرصيد</th><th>الحالة</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody>' +
+      '<tfoot><tr><td>إجمالي المجموعة</td><td>' + fmt(gQty) + '</td><td></td><td>' + fmtD(gVal) + '</td><td></td></tr></tfoot>' +
+      '</table></div></div>';
+  }).join('');
+
+  document.getElementById('tab3Sections').innerHTML = sections || '<div class="card empty-card">لا توجد بيانات — ارفع ملف Excel أولاً</div>';
+  document.getElementById('tgCount').textContent = names.length;
+  document.getElementById('tgItems').textContent = tItems;
+  document.getElementById('tgValue').textContent = fmtD(tVal);
+}
+
+/* ================= Export / Print ================= */
+document.getElementById('csvBtn').addEventListener('click', function() {
+  if (!items.length) { alert('لا توجد بيانات للتصدير.'); return; }
+  const head = ['كود', 'اسم السلعة', 'المجموعة', 'المستودع', 'الوحدة', 'الرصيد', 'القيمة', 'وارد', 'منصرف', 'السعر', 'حد الندرة'];
+  const lines = [head.join(',')];
+  items.forEach(it => {
+    const row = [it.code, it.name, it.group, it.warehouse, it.unit, it.balance, it.value, it.in, it.out, it.price, it.reorder];
+    lines.push(row.map(v => {
+      const s = String(v == null ? '' : v).replace(/"/g, '""');
+      return /[",\n]/.test(s) ? '"' + s + '"' : s;
+    }).join(','));
+  });
+  const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'inventory_export.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast('تم تصدير ' + items.length + ' سجل');
+});
+document.getElementById('printBtn').addEventListener('click', () => window.print());
+document.getElementById('standaloneBtn').addEventListener('click', saveInPlace);
+
+/* ================= Refresh ================= */
+function safeRun(fn, label) {
+  try { fn(); } catch (e) { console.error(label + ' error:', e); }
+}
+function refreshAll() {
+  safeRun(renderGroupFilter, 'renderGroupFilter');
+  safeRun(renderKPIs, 'renderKPIs');
+  safeRun(renderTable, 'renderTable');
+  safeRun(renderAlerts, 'renderAlerts');
+  safeRun(renderCharts, 'renderCharts');
+  if (!document.getElementById('tab2').classList.contains('hidden')) safeRun(renderGroups, 'renderGroups');
+  if (!document.getElementById('tab3').classList.contains('hidden')) safeRun(renderItemsByGroup, 'renderItemsByGroup');
+}
+
+/* ================= Events ================= */
+document.getElementById('searchInput').addEventListener('input', renderTable);
+document.getElementById('groupFilter').addEventListener('change', renderTable);
+document.getElementById('statusFilter').addEventListener('change', renderTable);
+document.getElementById('sortSelect').addEventListener('change', renderTable);
+document.getElementById('thresholdInput').addEventListener('input', () => { refreshAll(); saveItems(); });
+document.getElementById('groupSort').addEventListener('change', renderGroups);
+
+function resetFilters() {
+  document.getElementById('searchInput').value = '';
+  document.getElementById('groupFilter').value = '';
+  document.getElementById('statusFilter').value = '';
+  renderTable();
+}
+document.getElementById('showAllBtn').addEventListener('click', resetFilters);
+document.getElementById('showAllBtn2').addEventListener('click', resetFilters);
+
+/* ================= Init (after DOM & libs load) ================= */
+window.addEventListener('error', function(e) {
+  console.error('Global error caught:', e && e.message ? e.message : e);
+});
+window.addEventListener('load', function() {
+  try {
+    const stored = loadItems();
+    const bundled = getBundledData();
+    const bundledTs = getBundledTimestamp();
+    items = bundled || stored || demoData();
+    if (!stored) saveItems();
+    if (bundledTs) { try { localStorage.setItem('inv_last_update', String(bundledTs)); } catch(e){} }
+    refreshAll();
+    safeRun(renderSaveDate, 'renderSaveDate');
+  } catch (e) {
+    console.error('Init error:', e);
+    // حتى لو حدث خطأ غير متوقع، نضمن وجود بيانات تجريبية على الأقل بدل صفحة فارغة
+    try {
+      if (!items || !items.length) items = demoData();
+      refreshAll();
+    } catch (e2) {}
+  }
+});
+</script>
+
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
